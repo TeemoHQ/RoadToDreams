@@ -16,6 +16,8 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="7.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="7.0.0" />
 		<PackageReference Include="MySql.Data" Version="8.0.31" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="System.Speech" Version="7.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
