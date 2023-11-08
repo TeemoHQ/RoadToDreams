@@ -99,5 +99,12 @@ namespace VideoHandler.Repositories
             var res = await _connection.ExecuteAsync(sql, new { ids }) > 0;
             return res;
         }
+
+        public async Task<List<string>> ConcatLoaclPath(List<int> ids)
+        {
+            var sql = $" select path from video_orgin where id in @ids";
+            var res = await _connection.QueryAsync<string>(sql, new { ids });
+            return res.ToList();
+        }
     }
 }

@@ -158,7 +158,7 @@ namespace VideoHandler
                 }
                 var stream = await res.Content.ReadAsStreamAsync();
                 resourcePath += video.Width > video.Height ? "/horizontal_video" : "/vertical_video";
-                resourcePath += $"/{video.Tag.Replace(" ", "")}";
+                resourcePath += $"/{video.Tag.Replace(" ", "_")}";
                 if (!Directory.Exists(resourcePath))
                 {
                     Directory.CreateDirectory(resourcePath);

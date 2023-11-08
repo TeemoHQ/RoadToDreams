@@ -71,7 +71,7 @@ namespace VideoHandler
                     var videoOrgin = await repostitory.LastVideoOrginGet(tag, minId ?? 0);
                     if (videoOrgin == null)
                     {
-                        Console.WriteLine("无可用原始视频");
+                        Console.WriteLine("无可用原始视频,准备开始抓取视频");
                         if (!await DownLoad(repostitory, tag, 5, new List<int>(), new List<int>()))
                         {
                             await Task.Delay(10 * 60 * 1000);
@@ -85,7 +85,7 @@ namespace VideoHandler
                         Console.WriteLine("开始检查视频音频");
                         var isHadVoice = CheckVideoAudioStream(videoOrgin.Path);
                         var outputVideoPath = $"{outputDirPath}/{DateTime.Now:yyyyMMddHHmmss}_{videoOrgin.Id}.mp4";
-                        Console.WriteLine($"开始视频添加文本");
+                        Console.WriteLine($"开始添加文本");
                         if (appSettings.WordSameTime)
                         {
                             AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
@@ -129,8 +129,9 @@ namespace VideoHandler
                 }
                 if (appSettings.DownloadConcat)
                 {
-                    var localPath = $"{appSettings.ResourcesPath}/concat/{DateTime.Now:yyyyMMddHHmmss}_{tag.Replace(" ", "_")}.mp4";
-                    CancatVideoFilesWithEncode(videopoolList.Select(s => s.LocalPath).ToList(), localPath);
+                    var localPath = $"{appSettings.ResourcesPath}/concat/{DateTime.Now:yyyyMMddHHmmss}_{tag.Replace(" ","_")}.mp4";
+                    var videoPathList = await repostitory.ConcatLoaclPath(orginVideoIds);
+                    CancatVideoFilesWithEncode(videoPathList, localPath);
                     await repostitory.AfterConcat(orginVideoIds, 1, $"{tag.Replace(" ", "_")}_{string.Join('_', videopoolList.Select(s => s.VideoId))}", localPath, tag);
                 }
                 return true;
