@@ -25,6 +25,10 @@ namespace VideoHandler
         public string FontColor { get; set; } = "white";
 
         public int VideoTime { get; set; } = 30;
+
+        public bool WordSameTime { get; set; }
+
+        public bool DownloadConcat { get; set; }
     }
 
 }

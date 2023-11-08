@@ -92,7 +92,7 @@ namespace VideoHandler
         /// <param name="count"></param>
         /// <param name="orientation">landscape, portrait or square.</param>
         /// <returns></returns>
-        public static async Task<(bool, List<VideoPool>)> GetVideoByApi(int duration = 12, string tag = "forest", int page = 1, int count = 80, string orientation = "portrait", string size = "large")
+        public static async Task<(bool, List<VideoPool>)> GetVideoByApi(int duration = 12, string tag = "forest", int page = 1, int count = 80, string orientation = "landscape", string size = "large")
         {
             try
             {
@@ -135,6 +135,52 @@ namespace VideoHandler
             {
                 return (true, null);
             }
+        }
+
+        /// <summary>
+        /// 下载 并且修改数据库状态
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
+        public static async Task<bool> DownLoad(VideoPool video, string resourcePath)
+        {
+            try
+            {
+                var res = await _httpClient.GetAsync(video.Url);
+                if (res != null && res.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    res = await _httpClient.GetAsync(video.Url);
+                    if (res != null && res.StatusCode == HttpStatusCode.Forbidden)
+                    {
+                        Console.WriteLine("重试失败，准备换地址");
+                        return false;
+                    }
+                }
+                var stream = await res.Content.ReadAsStreamAsync();
+                resourcePath += video.Width > video.Height ? "/horizontal_video" : "/vertical_video";
+                resourcePath += $"/{video.Tag.Replace(" ", "")}";
+                if (!Directory.Exists(resourcePath))
+                {
+                    Directory.CreateDirectory(resourcePath);
+                }
+                video.LocalPath = resourcePath + $"/{video.VideoId}.mp4";
+                if (File.Exists(video.LocalPath))
+                {
+                    File.Delete(video.LocalPath);
+                }
+                using (var fileStream = new FileStream(video.LocalPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await stream.CopyToAsync(fileStream);
+                }
+                return true;
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                return false;
+            }
+
         }
     }
 }

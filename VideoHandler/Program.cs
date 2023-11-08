@@ -3,9 +3,13 @@ using Microsoft.Extensions.Configuration;
 using MySql.Data.MySqlClient;
 using System;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Drawing;
+using System.Linq;
+using System.Speech.Recognition;
 using System.Speech.Synthesis;
 using VideoHandler.DbModel;
+using VideoHandler.Repositories;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace VideoHandler
@@ -13,7 +17,11 @@ namespace VideoHandler
     public class Program
     {
         public static AppSettings appSettings = null;
-
+        // Handle the SpeechRecognized event.  
+        static void recognizer_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
+        {
+            Console.WriteLine("Recognized text: " + e.Result.Text);
+        }
         static async Task Main()
         {
             var config = new ConfigurationBuilder()
@@ -27,61 +35,66 @@ namespace VideoHandler
                 Console.ReadKey();
                 return;
             }
+
+            //Console.WriteLine("请输入执行类型1 获取第三方视频 其他构造视频");
+            //var key = Console.ReadLine();
+            //if (key == "1")
+            //{
+            //    Console.WriteLine("请输入tag：例如:sea;ocean wave night;forest;");
+            //    var value = Console.ReadLine();
+            //    var tag = string.IsNullOrWhiteSpace(value) ? "sea" : value;
+            //    await BackgroundHandler(tag);
+            //}
             var outputDirPath = "Output";
             if (!Directory.Exists(outputDirPath))
             {
                 Directory.CreateDirectory(outputDirPath);
             }
-            List<VideoPool> videoPool = new List<VideoPool>();
-            for (int i = 1; i < 10000; i++)
-            {
-                (bool bo, List<VideoPool> videoPoolTemp) = await PexelsSpider.GetVideoByApi(page: i);
-                if (!bo)
-                {
-                    break;
-                }
-                if (videoPoolTemp != null)
-                {
-                    videoPoolTemp.ForEach(s => videoPool.Add(s));
-                }
-            }
-
-
             Console.WriteLine("开始构造");
-            using var connection = new MySqlConnection(appSettings.MysqlConnectionString);
+            var repostitory = new VideoRepository(appSettings.MysqlConnectionString);
             while (true)
             {
                 try
                 {
-                    var lastModel = await connection.QueryFirstOrDefaultAsync<VideoResult>("select id,orgin_id orginid,words_id wordsid,bgm_id bgmid,path  from video_result WHERE id = (SELECT MAX(id) FROM video_result)");
+                    var lastModel = await repostitory.LastVideoResultGet();
                     var minId = lastModel?.OrginId;
                     var minWordsId = lastModel?.WordsId;
 
-                    var videoWords = await connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content  from video_words WHERE id >{minWordsId ?? 0} limit 1");
+                    var videoWords = await repostitory.LastVideoWordsGet(minWordsId ?? 0);
                     if (videoWords == null)
                     {
                         Console.WriteLine("无可用文案");
                         await Task.Delay(10 * 60 * 1000);
                         continue;
                     }
-
-                    var tag = videoWords.EmotionType == 1 ? "forest" : "other";
-                    var videoOrgin = await connection.QueryFirstOrDefaultAsync<VideoOrgin>($"select id,orientate_type OrientateType,name,path,tag tag  from video_orgin WHERE id >{minId ?? 0} and tag='{tag}'");
+                    var tag = EmotionToVideoTag((EnumEmotion)videoWords.EmotionType);
+                    var videoOrgin = await repostitory.LastVideoOrginGet(tag, minId ?? 0);
                     if (videoOrgin == null)
                     {
                         Console.WriteLine("无可用原始视频");
-                        await Task.Delay(10 * 60 * 1000);
+                        if (!await DownLoad(repostitory, tag, 5, new List<int>(), new List<int>()))
+                        {
+                            await Task.Delay(10 * 60 * 1000);
+                        }
                         continue;
                     }
 
-
-                    var bgm = await connection.QueryFirstOrDefaultAsync<VideoBgm>($"select id,emotion_type emotionType,name,path  from video_bgm WHERE emotion_type={videoOrgin.EmotionType} and id!={lastModel?.BgmId ?? 0} order by rand() LIMIT 1");
+                    var bgm = await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
                     if (!string.IsNullOrWhiteSpace(bgm?.Path) && !string.IsNullOrWhiteSpace(videoOrgin?.Path) && videoWords != null)
                     {
+                        Console.WriteLine("开始检查视频音频");
                         var isHadVoice = CheckVideoAudioStream(videoOrgin.Path);
-                        var outputVideoPath = $"{outputDirPath}/{DateTime.Now:yyyyMMddHHmmss}.mp4";
-                        AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
-                        await connection.ExecuteAsync($"insert into video_result(orgin_id,words_id,bgm_id,path,add_time) values({videoOrgin.Id},{videoWords.Id},{bgm.Id},'{outputVideoPath}',now(3))");
+                        var outputVideoPath = $"{outputDirPath}/{DateTime.Now:yyyyMMddHHmmss}_{videoOrgin.Id}.mp4";
+                        Console.WriteLine($"开始视频添加文本");
+                        if (appSettings.WordSameTime)
+                        {
+                            AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                        }
+                        else
+                        {
+                            AddTextToVideo(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                        }
+                        await repostitory.VideoResultSave(new VideoResult { OrginId = videoOrgin.Id, WordsId = videoWords.Id, BgmId = bgm.Id, Path = outputVideoPath });
                     }
                 }
                 catch (Exception ex)
@@ -94,13 +107,43 @@ namespace VideoHandler
             }
 
         }
+        static async Task<bool> DownLoad(VideoRepository repostitory, string tag, int count, List<int> orginVideoIds, List<int> videopoolIds)
+        {
+            var currentCount = count - orginVideoIds.Count;
+            var videopoolList = await repostitory.VideoPoolGetRand(tag, currentCount, videopoolIds, 12, 20);
+            if (videopoolList.Count == currentCount)
+            {
+                foreach (var item in videopoolList)
+                {
+                    if (await PexelsSpider.DownLoad(item, appSettings.ResourcesPath))
+                    {
+                        var id = await repostitory.AfterDownload(item);
+                        orginVideoIds.Add(id);
+                        videopoolIds.Add(item.Id);
+                        Console.WriteLine($"{id} 下载成功");
+                    }
+                    else
+                    {
+                        return await DownLoad(repostitory, tag, count, orginVideoIds, videopoolIds);
+                    }
+                }
+                if (appSettings.DownloadConcat)
+                {
+                    var localPath = $"{appSettings.ResourcesPath}/concat/{DateTime.Now:yyyyMMddHHmmss}_{tag.Replace(" ", "_")}.mp4";
+                    CancatVideoFilesWithEncode(videopoolList.Select(s => s.LocalPath).ToList(), localPath);
+                    await repostitory.AfterConcat(orginVideoIds, 1, $"{tag.Replace(" ", "_")}_{string.Join('_', videopoolList.Select(s => s.VideoId))}", localPath, tag);
+                }
+                return true;
+            }
+            return false;
+        }
 
         static void AddTextToVideoSameTime(string audioPath, string videoPath, string outputVideoPath, string words, bool isHadVoice = false)
         {
             //循环：Set number of times input stream shall be looped. Loop 0 means no loop, loop -1 means infinite loop
             var loopSet = $"-stream_loop -1 ";
             //输入音频
-            var inputSet = $" -i {appSettings.ResourcesPath}/{videoPath} -i {appSettings.ResourcesPath}/{audioPath} ";
+            var inputSet = $" -i {videoPath} -i {audioPath} ";
             //过滤掉视频原声 插入音乐作为bgm
             var bgmSet = isHadVoice ? $" -filter_complex \"[0:a]anull[a];[1:a]aformat=fltp:44100:stereo[background];[a][background]amix=inputs=2:duration=first:dropout_transition=3[outa]\"  -map 0:v -map \"[outa]\" " : string.Empty;
             //插入文案 文案的时间分配， 文案标点符号自动换行
@@ -151,7 +194,7 @@ namespace VideoHandler
             //循环：Set number of times input stream shall be looped. Loop 0 means no loop, loop -1 means infinite loop
             var loopSet = $"-stream_loop -1 ";
             //输入音频
-            var inputSet = $" -i {appSettings.ResourcesPath}/{videoPath} -i {appSettings.ResourcesPath}/{audioPath} ";
+            var inputSet = $" -i {videoPath} -i {audioPath} ";
             //过滤掉视频原声 插入音乐作为bgm
             var bgmSet = isHadVoice ? $" -filter_complex \"[0:a]anull[a];[1:a]aformat=fltp:44100:stereo[background];[a][background]amix=inputs=2:duration=first:dropout_transition=3[outa]\"  -map 0:v -map \"[outa]\" " : string.Empty;
             //插入文案 文案的时间分配， 文案标点符号自动换行
@@ -159,7 +202,6 @@ namespace VideoHandler
 
             char[] delimiters = { '；', '。', ';', '.' };
             var drawTextList = new List<string>();
-
             string[] parts = words.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
             var timeGap = (appSettings.VideoTime / parts.Count()) - 1;
             //timeGap = timeGap > 6 ? 6 : timeGap;
@@ -168,11 +210,13 @@ namespace VideoHandler
                 var start = j + 1 + (timeGap * j);
                 var end = start + timeGap;
                 Console.WriteLine($"start:{start}  end:{end}");
-                if (parts[j].Count() > 20)
+                char[] delimitersSameTime = { ',', '，' };
+                parts[j] = $"「{parts[j]}」";
+                var partSameTimeList = parts[j].Split(delimitersSameTime, StringSplitOptions.RemoveEmptyEntries);
+                if (partSameTimeList.Count() > 1)
                 {
-                    var cutoffStrList = parts[j].Chunk(20).ToList();
-                    var baseHeight = cutoffStrList.Count() == 1 ? -0 : -appSettings.FontSize;
-                    foreach (var item in cutoffStrList)
+                    var baseHeight = partSameTimeList.Count() == 1 ? -0 : -appSettings.FontSize;
+                    foreach (var item in partSameTimeList)
                     {
                         var temp = new string(item);
                         drawTextList.Add($" drawtext=fontfile={appSettings.FontType}:text='{temp}':x=(w-text_w)/2:y=((h-text_h)/2)+({baseHeight}):fontsize={appSettings.FontSize}:fontcolor={appSettings.FontColor}:enable='between(t,{start},{end})' ");
@@ -218,7 +262,7 @@ namespace VideoHandler
             var processInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i {appSettings.ResourcesPath}/{videoPath}",
+                Arguments = $"-i {videoPath}",
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -301,7 +345,6 @@ namespace VideoHandler
 
         }
 
-
         static void CancatVoiceFiles(string dirPath, string outputPath)
         {
             string[] files = Directory.GetFiles(dirPath, "*.mp3", SearchOption.AllDirectories);
@@ -338,25 +381,80 @@ namespace VideoHandler
             }
         }
 
+        [Obsolete("使用CancatVideoFilesWithEncode")]
+        static void CancatVideoFiles(List<string> fileList, string outputPath)
+        {
+            var listFilePath = $"list{DateTime.Now:yyyyMMddhhmmss}.txt";
+            using (StreamWriter writer = new StreamWriter(listFilePath))
+            {
+                foreach (string file in fileList)
+                {
+                    writer.WriteLine($"file '{file}'");
+                }
+            }
+            var arg = $"-f concat -safe 0 -i {listFilePath} -c copy {outputPath}";
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = arg,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = false,
+                    RedirectStandardError = true
+                },
+                EnableRaisingEvents = true
+            };
 
+            process.Start();
 
+            string processOutput = null;
+            while ((processOutput = process.StandardError.ReadLine()) != null)
+            {
+                // do something with processOutput
+                Console.WriteLine(processOutput);
+            }
+        }
 
+        static void CancatVideoFilesWithEncode(List<string> fileList, string outputPath)
+        {
+            //ffmpeg -i E:/Personal/Resources/horizontal_video/autumn/5756887.mp4 -i E:/Personal/Resources/horizontal_video/autumn/5384345.mp4 -i E:/Personal/Resources/horizontal_video/autumn/6209891.mp4 -i E:/Personal/Resources/horizontal_video/autumn/5851973.mp4 -i E:/Personal/Resources/horizontal_video/autumn/10112780.mp4 -filter_complex "[0:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v0]; [1:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v1]; [2:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v2]; [3:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v3]; [4:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v4]; [v0][v1][v2][v3][v4]concat=n=5:v=1:a=0[outv]" -map "[outv]" -g 25 -c:v libx264 -preset veryfast -crf 23 output.mp4
+            //不同编码的视频合并 可能无法播放
+            var inputArg = string.Empty;
+            var encodeArg = string.Empty;
+            var encodeArg2 = string.Empty;
+            for (int i = 0; i < fileList.Count; i++)
+            {
+                inputArg += $" -i {fileList[i]} ";
+                encodeArg += $"[{i}:v]setpts=PTS-STARTPTS, scale=1920:1080, setpts=PTS-STARTPTS[v{i}];";
+                encodeArg2 += $"[v{i}]";
+            }
+            var arg = inputArg + $" -filter_complex \"" + encodeArg + encodeArg2 + $"concat=n={fileList.Count}:v=1:a=0[outv]\" -map \"[outv]\" -g 25 -c:v libx264 -preset veryfast -crf 23 " + outputPath;
 
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = arg,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = false,
+                    RedirectStandardError = true
+                },
+                EnableRaisingEvents = true
+            };
 
+            process.Start();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+            string processOutput = null;
+            while ((processOutput = process.StandardError.ReadLine()) != null)
+            {
+                // do something with processOutput
+                Console.WriteLine(processOutput);
+            }
+        }
 
         /// <summary>
         /// Demo
@@ -394,6 +492,47 @@ namespace VideoHandler
                 Console.WriteLine(processOutput);
             }
         }
+
+        static string EmotionToVideoTag(EnumEmotion enumEmotion)
+        {
+            switch (enumEmotion)
+            {
+                case EnumEmotion.激励:
+                    return "sea waves";
+                case EnumEmotion.情感:
+                    return "forest";
+                case EnumEmotion.秋://秋的视频质量太差 大部分都是人
+                    return "sea waves";
+                default:
+                    break;
+            }
+            return null;
+        }
+
+        #region 后台任务
+
+        static async Task BackgroundHandler(string tag = "forest")
+        {
+            List<VideoPool> videoPool = new List<VideoPool>();
+            for (int i = 1; i < 10000; i++)
+            {
+                Console.WriteLine($"第{i}批次");
+                (bool bo, List<VideoPool> videoPoolTemp) = await PexelsSpider.GetVideoByApi(page: i, tag: tag);
+                if (!bo)
+                {
+                    break;
+                }
+                if (videoPoolTemp != null)
+                {
+                    videoPoolTemp.ForEach(s => videoPool.Add(s));
+                }
+            }
+            var r = new VideoRepository(appSettings.MysqlConnectionString);
+            await r.VideoPoolSave(videoPool);
+            Console.ReadLine();
+            return;
+        }
+        #endregion
 
     }
 }
