@@ -6,10 +6,9 @@ using System.Threading.Tasks;
 
 namespace VideoHandler
 {
-    public enum EnumEmotion
+    public enum EnumWebType
     {
-        忧郁 = 1,
-        自定义 = 2,
-        动漫 = 3
+        pexels, //HsuZCJYlo5KiN6Bk0Nr0Dt3ikLD6xySX7EGKuRlTDkl7vOjxdxWr0P5B
+        pixabay //40564603-47bed66d2c4354d13706f415a
     }
 }

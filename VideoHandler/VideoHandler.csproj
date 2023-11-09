@@ -21,6 +21,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\PixabaySharp\PixabaySharp.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <None Update="appsettings.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>

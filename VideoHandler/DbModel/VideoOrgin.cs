@@ -17,5 +17,7 @@ namespace VideoHandler.DbModel
         public string Path { get; set; }
 
         public int EmotionType { get; set; }
+
+        public int Duration { get; set; }
     }
 }

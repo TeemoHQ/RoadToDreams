@@ -1,10 +1,14 @@
 ﻿using Dapper;
 using Microsoft.Extensions.Configuration;
 using MySql.Data.MySqlClient;
+using PixabaySharp;
+using PixabaySharp.Models;
+using PixabaySharp.Utility;
 using System;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Speech.Recognition;
 using System.Speech.Synthesis;
@@ -36,15 +40,16 @@ namespace VideoHandler
                 return;
             }
 
-            //Console.WriteLine("请输入执行类型1 获取第三方视频 其他构造视频");
-            //var key = Console.ReadLine();
-            //if (key == "1")
-            //{
-            //    Console.WriteLine("请输入tag：例如:sea;ocean wave night;forest;");
-            //    var value = Console.ReadLine();
-            //    var tag = string.IsNullOrWhiteSpace(value) ? "sea" : value;
-            //    await BackgroundHandler(tag);
-            //}
+            if (appSettings.IsBackground)
+            {
+                Console.WriteLine($"WebType:{appSettings.WebType} tag:{appSettings.SearchTag} 开始执行");
+                if (string.IsNullOrWhiteSpace(appSettings.SearchTag))
+                {
+                    Console.WriteLine("请配置tag");
+                    return;
+                }
+                await BackgroundHandler(appSettings.SearchTag);
+            }
             var outputDirPath = "Output";
             if (!Directory.Exists(outputDirPath))
             {
@@ -67,34 +72,49 @@ namespace VideoHandler
                         await Task.Delay(10 * 60 * 1000);
                         continue;
                     }
-                    var tag = EmotionToVideoTag((EnumEmotion)videoWords.EmotionType);
+                    if (string.IsNullOrWhiteSpace(videoWords.Content))
+                    {
+                        videoWords.EmotionType = (int)EnumEmotion.忧郁;
+                    }
+                    var tag = appSettings.SearchTag;
                     var videoOrgin = await repostitory.LastVideoOrginGet(tag, minId ?? 0);
                     if (videoOrgin == null)
                     {
                         Console.WriteLine("无可用原始视频,准备开始抓取视频");
-                        if (!await DownLoad(repostitory, tag, 5, new List<int>(), new List<int>()))
+                        if (!await DownLoad(repostitory, tag, 3, new List<int>(), new List<VideoPool>()))
                         {
                             await Task.Delay(10 * 60 * 1000);
                         }
                         continue;
                     }
-
                     var bgm = await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
+                    if (appSettings.BgmId > 0)
+                    {
+                        bgm = await repostitory.VideoBgmGet(appSettings.BgmId);
+                    }
                     if (!string.IsNullOrWhiteSpace(bgm?.Path) && !string.IsNullOrWhiteSpace(videoOrgin?.Path) && videoWords != null)
                     {
                         Console.WriteLine("开始检查视频音频");
                         var isHadVoice = CheckVideoAudioStream(videoOrgin.Path);
                         var outputVideoPath = $"{outputDirPath}/{DateTime.Now:yyyyMMddHHmmss}_{videoOrgin.Id}.mp4";
-                        Console.WriteLine($"开始添加文本");
-                        if (appSettings.WordSameTime)
+                        Console.WriteLine($"开始添加文本,如果没有文本那么只添加bgm");
+                        if (!string.IsNullOrWhiteSpace(videoWords.Content))
                         {
-                            AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                            if (appSettings.WordSameTime)
+                            {
+                                AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                            }
+                            else
+                            {
+                                AddTextToVideo(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                            }
                         }
                         else
                         {
-                            AddTextToVideo(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
+                            AddTextToVideoWithoutWords(bgm.Path, videoOrgin.Path, outputVideoPath, videoOrgin.Duration, isHadVoice);
                         }
-                        await repostitory.VideoResultSave(new VideoResult { OrginId = videoOrgin.Id, WordsId = videoWords.Id, BgmId = bgm.Id, Path = outputVideoPath });
+
+                        await repostitory.VideoResultSave(new DbModel.VideoResult { OrginId = videoOrgin.Id, WordsId = videoWords.Id, BgmId = bgm.Id, Path = outputVideoPath });
                     }
                 }
                 catch (Exception ex)
@@ -107,10 +127,11 @@ namespace VideoHandler
             }
 
         }
-        static async Task<bool> DownLoad(VideoRepository repostitory, string tag, int count, List<int> orginVideoIds, List<int> videopoolIds)
+        static async Task<bool> DownLoad(VideoRepository repostitory, string tag, int count, List<int> orginVideoIds, List<VideoPool> alreadyDownloadVideoPoolIds)
         {
             var currentCount = count - orginVideoIds.Count;
-            var videopoolList = await repostitory.VideoPoolGetRand(tag, currentCount, videopoolIds, 12, 20);
+            var videopoolIds = alreadyDownloadVideoPoolIds.Select(s => s.Id).ToList();
+            var videopoolList = await repostitory.VideoPoolGet(tag, currentCount, videopoolIds, 10, 40, appSettings.WebType == EnumWebType.pexels);
             if (videopoolList.Count == currentCount)
             {
                 foreach (var item in videopoolList)
@@ -119,25 +140,62 @@ namespace VideoHandler
                     {
                         var id = await repostitory.AfterDownload(item);
                         orginVideoIds.Add(id);
-                        videopoolIds.Add(item.Id);
+                        alreadyDownloadVideoPoolIds.Add(item);
                         Console.WriteLine($"{id} 下载成功");
                     }
                     else
                     {
-                        return await DownLoad(repostitory, tag, count, orginVideoIds, videopoolIds);
+                        return await DownLoad(repostitory, tag, count, orginVideoIds, alreadyDownloadVideoPoolIds);
                     }
                 }
                 if (appSettings.DownloadConcat)
                 {
-                    var localPath = $"{appSettings.ResourcesPath}/concat/{DateTime.Now:yyyyMMddHHmmss}_{tag.Replace(" ","_")}.mp4";
+                    var localPath = $"{appSettings.ResourcesPath}/concat/{DateTime.Now:yyyyMMddHHmmss}_{tag.Replace(" ", "_")}.mp4";
                     var videoPathList = await repostitory.ConcatLoaclPath(orginVideoIds);
                     CancatVideoFilesWithEncode(videoPathList, localPath);
-                    await repostitory.AfterConcat(orginVideoIds, 1, $"{tag.Replace(" ", "_")}_{string.Join('_', videopoolList.Select(s => s.VideoId))}", localPath, tag);
+                    var duration = alreadyDownloadVideoPoolIds.Sum(s => s.Duration);
+                    await repostitory.AfterConcat(orginVideoIds, 1, $"{tag.Replace(" ", "_")}_{string.Join('_', videopoolList.Select(s => s.VideoId))}", localPath, tag, duration);
                 }
                 return true;
             }
             return false;
         }
+
+        static void AddTextToVideoWithoutWords(string audioPath, string videoPath, string outputVideoPath, int time, bool isHadVoice = false)
+        {
+            //循环：Set number of times input stream shall be looped. Loop 0 means no loop, loop -1 means infinite loop
+            var loopSet = $"-stream_loop -1 ";
+            //输入音频
+            var inputSet = $" -i {videoPath} -i {audioPath} ";
+            //过滤掉视频原声 插入音乐作为bgm
+            var bgmSet = isHadVoice ? $" -filter_complex \"[0:a]anull[a];[1:a]aformat=fltp:44100:stereo[background];[a][background]amix=inputs=2:duration=first:dropout_transition=3[outa]\"  -map 0:v -map \"[outa]\" " : string.Empty;
+
+            var timeSet = $" -t {time} ";
+            var arg = loopSet + inputSet + bgmSet + timeSet + outputVideoPath;
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "D:\\soft\\ffmpeg\\bin\\ffmpeg",
+                    Arguments = arg,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = false,
+                    RedirectStandardError = true
+                },
+                EnableRaisingEvents = true
+            };
+
+            process.Start();
+
+            string processOutput = null;
+            while ((processOutput = process.StandardError.ReadLine()) != null)
+            {
+                // do something with processOutput
+                Console.WriteLine(processOutput);
+            }
+        }
+
 
         static void AddTextToVideoSameTime(string audioPath, string videoPath, string outputVideoPath, string words, bool isHadVoice = false)
         {
@@ -498,11 +556,11 @@ namespace VideoHandler
         {
             switch (enumEmotion)
             {
-                case EnumEmotion.激励:
+                case EnumEmotion.忧郁:
                     return "sea waves";
-                case EnumEmotion.情感:
+                case EnumEmotion.自定义:
                     return "forest";
-                case EnumEmotion.秋://秋的视频质量太差 大部分都是人
+                case EnumEmotion.动漫://秋的视频质量太差 大部分都是人
                     return "sea waves";
                 default:
                     break;
@@ -512,7 +570,20 @@ namespace VideoHandler
 
         #region 后台任务
 
-        static async Task BackgroundHandler(string tag = "forest")
+        static async Task BackgroundHandler(string tag)
+        {
+            if (appSettings.WebType == EnumWebType.pexels)
+            {
+                await PexelsLoad(tag);
+            }
+            else
+            {
+                await PixabayLoad(tag);
+            }
+
+        }
+
+        private static async Task PexelsLoad(string tag)
         {
             List<VideoPool> videoPool = new List<VideoPool>();
             for (int i = 1; i < 10000; i++)
@@ -533,6 +604,52 @@ namespace VideoHandler
             Console.ReadLine();
             return;
         }
+
+        private static async Task PixabayLoad(string tag)
+        {
+            var client = new PixabaySharpClient("40564603-47bed66d2c4354d13706f415a");
+            List<VideoPool> videoPool = new List<VideoPool>();
+            var r = new VideoRepository(appSettings.MysqlConnectionString);
+            var page = (await r.VideoPoolGetLastPage(tag)) + 1;
+            Console.WriteLine($"第{page}页批次");
+            var result = await client.QueryVideosAsync(new VideoQueryBuilder()
+            {
+                VideoType = PixabaySharp.Enums.VideoType.Film,
+                Category = PixabaySharp.Enums.Category.Nature,
+                IsEditorsChoice = true,
+                Query = tag,
+                Page = page,
+                PerPage = 200,
+                MinWidth = 1920
+            });
+            foreach (var VideoItem in result.Videos)
+            {
+                if (VideoItem.Videos.Large != null)
+                {
+                    var fileInfo = VideoItem.Videos.Large;
+                    videoPool.Add(new VideoPool
+                    {
+                        Downloaded = 0,
+                        Duration = VideoItem.Duration,
+                        Height = fileInfo.Height,
+                        Width = fileInfo.Width,
+                        Tag = tag,
+                        Url = fileInfo.Url,
+                        VideoId = VideoItem.Id,
+                        VideoFileId = 0,
+                        Page = page,
+                        WebType = (int)EnumWebType.pixabay
+                    });
+                }
+
+            }
+
+            await r.VideoPoolSave(videoPool);
+            Console.WriteLine($"下载结束 一共{videoPool.Count}个");
+            Console.ReadLine();
+            return;
+        }
+
         #endregion
 
     }

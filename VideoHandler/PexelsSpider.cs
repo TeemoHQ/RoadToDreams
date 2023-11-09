@@ -123,7 +123,8 @@ namespace VideoHandler
                                 Url = fileInfo.link,
                                 VideoId = video.id,
                                 VideoFileId = fileInfo.id,
-                                Page = page
+                                Page = page,
+                                WebType=(int)EnumWebType.pexels
                             });
                         }
                     }

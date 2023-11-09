@@ -30,12 +30,17 @@ namespace VideoHandler.Repositories
 
         public async Task<VideoOrgin> LastVideoOrginGet(string tag, int minId)
         {
-            return await _connection.QueryFirstOrDefaultAsync<VideoOrgin>($"select id,orientate_type OrientateType,name,path,tag tag  from video_orgin WHERE id >{minId} and tag='{tag}' and status=1");
+            return await _connection.QueryFirstOrDefaultAsync<VideoOrgin>($"select id,orientate_type OrientateType,name,path,tag tag,duration  from video_orgin WHERE id >{minId} and tag='{tag}' and status=1");
         }
 
         public async Task<VideoBgm> RandVideoBgmGet(int emotionType, int bgmId)
         {
             return await _connection.QueryFirstOrDefaultAsync<VideoBgm>($"select id,emotion_type emotionType,name,path  from video_bgm WHERE emotion_type={emotionType} and id!={bgmId} order by rand() LIMIT 1");
+        }
+
+        public async Task<VideoBgm> VideoBgmGet(int bgmId)
+        {
+            return await _connection.QueryFirstOrDefaultAsync<VideoBgm>($"select id,emotion_type emotionType,name,path  from video_bgm WHERE  id={bgmId} ");
         }
 
         public async Task<bool> VideoResultSave(VideoResult videoResult)
@@ -47,12 +52,12 @@ namespace VideoHandler.Repositories
         public async Task<bool> VideoPoolSave(List<VideoPool> list)
         {
             var insertList = new List<string>();
-            var sql = $" INSERT ignore INTO `video_pool` (`tag`, `url`, `local_path`, `downloaded`, `duration`, `width`, `height`, `video_id`, `video_file_id`, `page`, `status`, `add_time`) VALUES ";
+            var sql = $" INSERT ignore INTO `video_pool` (`tag`, `url`, `local_path`, `downloaded`, `duration`, `width`, `height`, `video_id`, `video_file_id`, `page`, `status`, `add_time`,`web_type`) VALUES ";
             foreach (var listChunk in list.Chunk(200))
             {
                 foreach (var item in listChunk)
                 {
-                    insertList.Add($" ('{item.Tag}', '{item.Url}', null, 0, {item.Duration}, {item.Width}, {item.Height}, {item.VideoId}, {item.VideoFileId}, '{item.Page}', '1', now(3)) ");
+                    insertList.Add($" ('{item.Tag}', '{item.Url}', null, 0, {item.Duration}, {item.Width}, {item.Height}, {item.VideoId}, {item.VideoFileId}, '{item.Page}', '1', now(3),{item.WebType}) ");
                 }
             }
             sql += string.Join(",", insertList);
@@ -60,7 +65,7 @@ namespace VideoHandler.Repositories
             return res;
         }
 
-        public async Task<List<VideoPool>> VideoPoolGetRand(string tag, int count, List<int> filterIds, int durationMin = 0, int durationMax = 0)
+        public async Task<List<VideoPool>> VideoPoolGet(string tag, int count, List<int> filterIds, int durationMin = 0, int durationMax = 0, bool rand = false, int webtype = 1)
         {
             var where = string.Empty;
             if (durationMin > 0)
@@ -77,9 +82,21 @@ namespace VideoHandler.Repositories
             {
                 where += $" and id not in ({string.Join(',', filterIds)})  ";
             }
-            var sql = $" select id,tag,url,duration,width,height,video_id videoid from video_pool where downloaded=0 and status=1 and tag='{tag}' {where} order by rand() limit {count}";
+
+            if (rand)
+            {
+                where += $" order by rand() ";
+            }
+            var sql = $" select id,tag,url,duration,width,height,video_id videoid from video_pool where downloaded=0 and web_type={webtype} and status=1 and tag='{tag}' {where}  limit {count}";
             var res = await _connection.QueryAsync<VideoPool>(sql);
             return res.ToList();
+        }
+
+        public async Task<int> VideoPoolGetLastPage(string tag, int webtype = 1)
+        {
+            var sql = $" select Max(id) from video_pool where web_type={webtype} and status=1 and tag='{tag}'";
+            var res = await _connection.QueryFirstOrDefaultAsync<int>(sql);
+            return res;
         }
 
         public async Task<int> AfterDownload(VideoPool video)
@@ -87,15 +104,15 @@ namespace VideoHandler.Repositories
             var orientate = video.Width > video.Height ? 0 : 1;
             var name = $"{video.Tag}_{video.VideoId}";
             var sql = $" update video_pool set downloaded=1 ,local_path='{video.LocalPath}' where id={video.Id}; " +
-                $" INSERT INTO `video_orgin` (`orientate_type`, `name`, `path`,`tag`,add_time) VALUES ({orientate}, '{name}', '{video.LocalPath}','{video.Tag}',now(3));SELECT LAST_INSERT_ID();";
+                $" INSERT INTO `video_orgin` (`orientate_type`, `name`, `path`,`tag`,add_time,Duration) VALUES ({orientate}, '{name}', '{video.LocalPath}','{video.Tag}',now(3),{video.Duration});SELECT LAST_INSERT_ID();";
             var res = await _connection.QueryFirstOrDefaultAsync<int>(sql);
             return res;
         }
 
-        public async Task<bool> AfterConcat(List<int> ids, int orientate, string name, string path, string tag)
+        public async Task<bool> AfterConcat(List<int> ids, int orientate, string name, string path, string tag, int duration)
         {
             var sql = $" update video_orgin set status=2  where id in @ids; " +
-                $" INSERT INTO `video_orgin` (`orientate_type`, `name`, `path`,`tag`,add_time) VALUES ({orientate}, '{name}', '{path}','{tag}',now(3))";
+                $" INSERT INTO `video_orgin` (`orientate_type`, `name`, `path`,`tag`,add_time,duration) VALUES ({orientate}, '{name}', '{path}','{tag}',now(3),{duration})";
             var res = await _connection.ExecuteAsync(sql, new { ids }) > 0;
             return res;
         }

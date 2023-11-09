@@ -13,6 +13,8 @@ namespace VideoHandler
 
         public string ResourcesPath { get; set; }
 
+        public int BgmId { get; set; }
+
         public int WordsCount { get; set; } = 3;
 
         /// <summary>
@@ -29,6 +31,11 @@ namespace VideoHandler
         public bool WordSameTime { get; set; }
 
         public bool DownloadConcat { get; set; }
+        public EnumWebType WebType { get; set; }
+
+        public string SearchTag { get; set; }
+
+        public bool IsBackground { get; set; }
     }
 
 }
