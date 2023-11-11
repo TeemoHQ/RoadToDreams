@@ -48,7 +48,7 @@ namespace VideoHandler
                     Console.WriteLine("请配置tag");
                     return;
                 }
-                await BackgroundHandler(appSettings.SearchTag);
+                await BackgroundHandler();
             }
             var outputDirPath = "Output";
             if (!Directory.Exists(outputDirPath))
@@ -64,6 +64,14 @@ namespace VideoHandler
                     var lastModel = await repostitory.LastVideoResultGet();
                     var minId = lastModel?.OrginId;
                     var minWordsId = lastModel?.WordsId;
+
+                    var toadyVideoWords = await repostitory.TodayVideoWordsGet();
+                    if (toadyVideoWords.Count <= 0)
+                    {
+                        await repostitory.AddTodayVideoWords();
+                        await Task.Delay(3000);
+                        continue;
+                    }
 
                     var videoWords = await repostitory.LastVideoWordsGet(minWordsId ?? 0);
                     if (videoWords == null)
@@ -83,7 +91,11 @@ namespace VideoHandler
                         Console.WriteLine("无可用原始视频,准备开始抓取视频");
                         if (!await DownLoad(repostitory, tag, 3, new List<int>(), new List<VideoPool>()))
                         {
-                            await Task.Delay(10 * 60 * 1000);
+                            Console.WriteLine($"videopool 资源池视频不够了 {appSettings.SearchTag} WebType:{appSettings.WebType}");
+                            if (!await BackgroundHandler()) 
+                            {
+                                await Task.Delay(10 * 60 * 1000);
+                            }
                         }
                         continue;
                     }
@@ -570,20 +582,20 @@ namespace VideoHandler
 
         #region 后台任务
 
-        static async Task BackgroundHandler(string tag)
+        static async Task<bool> BackgroundHandler()
         {
             if (appSettings.WebType == EnumWebType.pexels)
             {
-                await PexelsLoad(tag);
+                return await PexelsLoad(appSettings.SearchTag);
             }
             else
             {
-                await PixabayLoad(tag);
+                return await PixabayLoad(appSettings.SearchTag);
             }
 
         }
 
-        private static async Task PexelsLoad(string tag)
+        private static async Task<bool> PexelsLoad(string tag)
         {
             List<VideoPool> videoPool = new List<VideoPool>();
             for (int i = 1; i < 10000; i++)
@@ -601,11 +613,10 @@ namespace VideoHandler
             }
             var r = new VideoRepository(appSettings.MysqlConnectionString);
             await r.VideoPoolSave(videoPool);
-            Console.ReadLine();
-            return;
+            return true;
         }
 
-        private static async Task PixabayLoad(string tag)
+        private static async Task<bool> PixabayLoad(string tag)
         {
             var client = new PixabaySharpClient("40564603-47bed66d2c4354d13706f415a");
             List<VideoPool> videoPool = new List<VideoPool>();
@@ -619,9 +630,13 @@ namespace VideoHandler
                 IsEditorsChoice = true,
                 Query = tag,
                 Page = page,
-                PerPage = 200,
-                MinWidth = 1920
+                PerPage = 200
             });
+            if (result == null || result.Videos == null || result.Videos.Count <= 0) 
+            {
+                Console.WriteLine("已经查询到最后一页了");
+                return false;
+            }
             foreach (var VideoItem in result.Videos)
             {
                 if (VideoItem.Videos.Large != null)
@@ -646,8 +661,7 @@ namespace VideoHandler
 
             await r.VideoPoolSave(videoPool);
             Console.WriteLine($"下载结束 一共{videoPool.Count}个");
-            Console.ReadLine();
-            return;
+            return true;
         }
 
         #endregion

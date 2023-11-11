@@ -25,7 +25,19 @@ namespace VideoHandler.Repositories
 
         public async Task<VideoWords> LastVideoWordsGet(int minWordsId)
         {
-            return await _connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content,emotion_type EmotionType  from video_words WHERE id >{minWordsId} limit 1");
+            return await _connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content,emotion_type EmotionType  from video_words WHERE id >{minWordsId}  limit 1");
+        }
+
+        public async Task<List<VideoWords>> TodayVideoWordsGet()
+        {
+            var res= await _connection.QueryAsync<VideoWords>($"select id,content,emotion_type EmotionType  from video_words WHERE add_time>curdate()");
+            return res.ToList();
+        }
+
+        public async Task<bool> AddTodayVideoWords()
+        {
+            var res = await _connection.ExecuteAsync($"INSERT INTO `video_words` (`emotion_type`, `content`, `add_time`) VALUES (1, '', now(3)),(1, '', now(3)),(1, '', now(3));");
+            return res>0;
         }
 
         public async Task<VideoOrgin> LastVideoOrginGet(string tag, int minId)
@@ -94,7 +106,7 @@ namespace VideoHandler.Repositories
 
         public async Task<int> VideoPoolGetLastPage(string tag, int webtype = 1)
         {
-            var sql = $" select Max(id) from video_pool where web_type={webtype} and status=1 and tag='{tag}'";
+            var sql = $" select page from video_pool where web_type={webtype} and status=1 and tag='{tag}' order by id desc";
             var res = await _connection.QueryFirstOrDefaultAsync<int>(sql);
             return res;
         }
