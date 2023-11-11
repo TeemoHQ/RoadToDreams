@@ -39,7 +39,12 @@ namespace VideoHandler
                 Console.ReadKey();
                 return;
             }
-
+            CancatVideoFilesWithEncode(new List<string>
+            {
+                "E:/Personal/Resources/horizontal_video/autumn/30222.mp4",
+                "E:/Personal/Resources/horizontal_video/autumn/57993.mp4"
+            }, "123.mp4");
+            return;
             if (appSettings.IsBackground)
             {
                 Console.WriteLine($"WebType:{appSettings.WebType} tag:{appSettings.SearchTag} 开始执行");
@@ -92,7 +97,7 @@ namespace VideoHandler
                         if (!await DownLoad(repostitory, tag, 3, new List<int>(), new List<VideoPool>()))
                         {
                             Console.WriteLine($"videopool 资源池视频不够了 {appSettings.SearchTag} WebType:{appSettings.WebType}");
-                            if (!await BackgroundHandler()) 
+                            if (!await BackgroundHandler())
                             {
                                 await Task.Delay(10 * 60 * 1000);
                             }
@@ -627,12 +632,12 @@ namespace VideoHandler
             {
                 VideoType = PixabaySharp.Enums.VideoType.Film,
                 Category = PixabaySharp.Enums.Category.Nature,
-                IsEditorsChoice = true,
+                ///IsEditorsChoice = true,
                 Query = tag,
                 Page = page,
                 PerPage = 200
             });
-            if (result == null || result.Videos == null || result.Videos.Count <= 0) 
+            if (result == null || result.Videos == null || result.Videos.Count <= 0)
             {
                 Console.WriteLine("已经查询到最后一页了");
                 return false;
