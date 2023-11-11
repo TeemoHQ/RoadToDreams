@@ -27,6 +27,7 @@ namespace PixabaySharp.Utility
             _baseVideoUri = "https://pixabay.com/api/videos/";
             _apiKey = apiKey;
             _httpClient= new HttpClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(1000);
         }
 
         /// <summary>
