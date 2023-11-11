@@ -50,15 +50,13 @@ CREATE TABLE `video_result` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE `video_result` (
+CREATE TABLE `video_words` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `orgin_id` int(11) NOT NULL,
-  `words_id` int(11) NOT NULL,
-  `bgm_id` int(11) NOT NULL,
-  `path` varchar(45) NOT NULL,
+  `emotion_type` int(11) NOT NULL,
+  `content` varchar(500) NOT NULL,
   `add_time` datetime NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4
 
 SELECT * FROM video_result;
 SELECT * FROM video_orgin;
