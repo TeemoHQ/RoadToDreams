@@ -36,6 +36,8 @@ namespace VideoHandler
         public string SearchTag { get; set; }
 
         public bool IsBackground { get; set; }
+
+        public int ConcatCount { get; set; } = 4;
     }
 
 }

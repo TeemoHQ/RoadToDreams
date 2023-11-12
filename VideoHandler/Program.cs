@@ -39,12 +39,6 @@ namespace VideoHandler
                 Console.ReadKey();
                 return;
             }
-            CancatVideoFilesWithEncode(new List<string>
-            {
-                "E:/Personal/Resources/horizontal_video/autumn/30222.mp4",
-                "E:/Personal/Resources/horizontal_video/autumn/57993.mp4"
-            }, "123.mp4");
-            return;
             if (appSettings.IsBackground)
             {
                 Console.WriteLine($"WebType:{appSettings.WebType} tag:{appSettings.SearchTag} 开始执行");
@@ -94,7 +88,7 @@ namespace VideoHandler
                     if (videoOrgin == null)
                     {
                         Console.WriteLine("无可用原始视频,准备开始抓取视频");
-                        if (!await DownLoad(repostitory, tag, 3, new List<int>(), new List<VideoPool>()))
+                        if (!await DownLoad(repostitory, tag, appSettings.ConcatCount, new List<int>(), new List<VideoPool>()))
                         {
                             Console.WriteLine($"videopool 资源池视频不够了 {appSettings.SearchTag} WebType:{appSettings.WebType}");
                             if (!await BackgroundHandler())
@@ -193,7 +187,7 @@ namespace VideoHandler
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "D:\\soft\\ffmpeg\\bin\\ffmpeg",
+                    FileName = "ffmpeg",
                     Arguments = arg,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -245,7 +239,7 @@ namespace VideoHandler
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "D:\\soft\\ffmpeg\\bin\\ffmpeg",
+                    FileName = "ffmpeg",
                     Arguments = arg,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -544,7 +538,7 @@ namespace VideoHandler
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "D:\\soft\\ffmpeg\\bin\\ffmpeg",
+                    FileName = "ffmpeg",
                     Arguments = $"-stream_loop -1 -i {videoPath} -i {audioPath} -filter_complex \"[0:a]anull[a];[1:a]aformat=fltp:44100:stereo[background];[a][background]amix=inputs=2:duration=first:dropout_transition=3[outa]\"  -map 0:v -map \"[outa]\" " +
                     $" -vf \"" +
                     $" drawtext=fontfile=Files/STKAITI.TTF:text='没有真正快乐的人，只有比较想的开的人':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=50:fontcolor=white:enable='between(t,1,6)' ," +
@@ -630,9 +624,9 @@ namespace VideoHandler
             Console.WriteLine($"第{page}页批次");
             var result = await client.QueryVideosAsync(new VideoQueryBuilder()
             {
-                VideoType = PixabaySharp.Enums.VideoType.Film,
+                //VideoType = PixabaySharp.Enums.VideoType.Film,
                 Category = PixabaySharp.Enums.Category.Nature,
-                ///IsEditorsChoice = true,
+                //IsEditorsChoice = true,
                 Query = tag,
                 Page = page,
                 PerPage = 200
@@ -644,9 +638,18 @@ namespace VideoHandler
             }
             foreach (var VideoItem in result.Videos)
             {
-                if (VideoItem.Videos.Large != null)
+                var fileInfo = VideoItem.Videos.Large;
+                if (VideoItem.Videos.Large != null && !string.IsNullOrWhiteSpace(VideoItem.Videos.Large.Url))
                 {
-                    var fileInfo = VideoItem.Videos.Large;
+                    fileInfo = VideoItem.Videos.Large;
+                  
+                }
+                else if(VideoItem.Videos.Medium != null && !string.IsNullOrWhiteSpace(VideoItem.Videos.Medium.Url))
+                {
+                    fileInfo = VideoItem.Videos.Medium;
+                }
+                if (fileInfo != null && !string.IsNullOrWhiteSpace(fileInfo.Url))
+                {
                     videoPool.Add(new VideoPool
                     {
                         Downloaded = 0,
