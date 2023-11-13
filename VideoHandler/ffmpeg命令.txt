@@ -1,0 +1,4 @@
+﻿1.转格式和截取
+ffmpeg -i Eutopia.ogg Eutopia.mp3
+
+for /f %i in ('ffprobe -v error -show_entries format^=duration -of default^=noprint_wrappers^=1:nokey^=1 "Eutopia.mp3"') do ffmpeg -ss 00:02:07 -i "Eutopia.mp3" -to %i -c copy 123.mp3
