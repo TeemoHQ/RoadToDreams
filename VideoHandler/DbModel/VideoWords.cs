@@ -13,5 +13,7 @@ namespace VideoHandler.DbModel
         public int EmotionType { get; set; }
 
         public string Content { get; set; }
+
+        public int BgmId { get; set; }
     }
 }

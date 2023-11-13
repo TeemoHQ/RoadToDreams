@@ -67,7 +67,7 @@ namespace VideoHandler
                     var toadyVideoWords = await repostitory.TodayVideoWordsGet();
                     if (toadyVideoWords.Count <= 0)
                     {
-                        await repostitory.AddTodayVideoWords();
+                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0});
                         await Task.Delay(3000);
                         continue;
                     }
@@ -98,11 +98,8 @@ namespace VideoHandler
                         }
                         continue;
                     }
-                    var bgm = await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
-                    if (appSettings.BgmId > 0)
-                    {
-                        bgm = await repostitory.VideoBgmGet(appSettings.BgmId);
-                    }
+                    var bgm = videoWords.BgmId > 0? await repostitory.VideoBgmGet(videoWords.BgmId):
+                        await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
                     if (!string.IsNullOrWhiteSpace(bgm?.Path) && !string.IsNullOrWhiteSpace(videoOrgin?.Path) && videoWords != null)
                     {
                         Console.WriteLine("开始检查视频音频");

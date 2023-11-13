@@ -25,18 +25,22 @@ namespace VideoHandler.Repositories
 
         public async Task<VideoWords> LastVideoWordsGet(int minWordsId)
         {
-            return await _connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content,emotion_type EmotionType  from video_words WHERE id >{minWordsId}  limit 1");
+            return await _connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content,emotion_type EmotionType,bgm_id BgmId   from video_words WHERE id >{minWordsId}  limit 1");
         }
 
         public async Task<List<VideoWords>> TodayVideoWordsGet()
         {
-            var res= await _connection.QueryAsync<VideoWords>($"select id,content,emotion_type EmotionType  from video_words WHERE add_time>curdate()");
+            var res= await _connection.QueryAsync<VideoWords>($"select id,content,emotion_type EmotionType,bgm_id BgmId  from video_words WHERE add_time>curdate()");
             return res.ToList();
         }
 
-        public async Task<bool> AddTodayVideoWords()
+        public async Task<bool> AddTodayVideoWords(List<int> bgmIds)
         {
-            var res = await _connection.ExecuteAsync($"INSERT INTO `video_words` (`emotion_type`, `content`, `add_time`) VALUES (1, '', now(3)),(1, '', now(3)),(1, '', now(3));");
+            var sql = "INSERT INTO `video_words` (`emotion_type`, `content`, `add_time`,bgm_id) VALUES";
+            var bgmSqlList = new List<string>();
+            bgmIds.ForEach(s => { bgmSqlList.Add($" (1, '', now(3),{s}) "); });
+            sql += string.Join(",", bgmSqlList);
+            var res = await _connection.ExecuteAsync(sql);
             return res>0;
         }
 

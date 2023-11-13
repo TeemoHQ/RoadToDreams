@@ -13,7 +13,7 @@ namespace VideoHandler
 
         public string ResourcesPath { get; set; }
 
-        public int BgmId { get; set; }
+        public List<int> BgmIdList { get; set; }
 
         public int WordsCount { get; set; } = 3;
 
