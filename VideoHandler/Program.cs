@@ -21,11 +21,6 @@ namespace VideoHandler
     public class Program
     {
         public static AppSettings appSettings = null;
-        // Handle the SpeechRecognized event.  
-        static void recognizer_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
-        {
-            Console.WriteLine("Recognized text: " + e.Result.Text);
-        }
         static async Task Main()
         {
             var config = new ConfigurationBuilder()
@@ -406,9 +401,9 @@ namespace VideoHandler
             // 配置音频输出.   
             //synth.SetOutputToDefaultAudioDevice();
             synth.SetOutputToWaveFile("1.mp3");
-            synth.SelectVoiceByHints(VoiceGender.Female, VoiceAge.Adult);
+            synth.SelectVoiceByHints(VoiceGender.Female, VoiceAge.Senior);
             // 字符串转语言.  
-            synth.Speak("有时候，坚持了你最不想干的事情之后，便可得到你最想要的东西");
+            synth.Speak("回头看轻舟已过万重山，向前看前路漫漫亦灿灿");
 
         }
 
