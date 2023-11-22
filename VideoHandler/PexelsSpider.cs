@@ -147,6 +147,7 @@ namespace VideoHandler
         {
             try
             {
+                _httpClient.Timeout = TimeSpan.FromSeconds(1000);
                 var res = await _httpClient.GetAsync(video.Url);
                 if (res != null && res.StatusCode == HttpStatusCode.Forbidden)
                 {

@@ -49,6 +49,7 @@ namespace VideoHandler
                 }
                 await BackgroundHandler();
             }
+
             var outputDirPath = "Output";
             if (!Directory.Exists(outputDirPath))
             {
@@ -67,7 +68,7 @@ namespace VideoHandler
                     var toadyVideoWords = await repostitory.TodayVideoWordsGet();
                     if (toadyVideoWords.Count <= 0)
                     {
-                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0});
+                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0,0,0,0});
                         await Task.Delay(3000);
                         continue;
                     }
@@ -628,7 +629,7 @@ namespace VideoHandler
                 Page = page,
                 PerPage = 200
             });
-            if (result == null || result.Videos == null || result.Videos.Count <= 0)
+             if (result == null || result.Videos == null || result.Videos.Count <= 0)
             {
                 Console.WriteLine("已经查询到最后一页了");
                 return false;
