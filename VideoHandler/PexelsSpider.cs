@@ -19,6 +19,11 @@ namespace VideoHandler
     //API key:HsuZCJYlo5KiN6Bk0Nr0Dt3ikLD6xySX7EGKuRlTDkl7vOjxdxWr0P5B
     public class PexelsSpider
     {
+        public static void Init()
+        {
+            _httpClient.Timeout = TimeSpan.FromSeconds(1000);
+        }
+
         private static HttpClient _httpClient = new HttpClient(new HttpClientHandler
         {
             Proxy = new WebProxy("http://127.0.0.1:7890"),
