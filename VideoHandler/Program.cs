@@ -56,6 +56,7 @@ namespace VideoHandler
                 Directory.CreateDirectory(outputDirPath);
             }
             Console.WriteLine("开始构造");
+            PexelsSpider.Init();
             var repostitory = new VideoRepository(appSettings.MysqlConnectionString);
             while (true)
             {
@@ -68,7 +69,7 @@ namespace VideoHandler
                     var toadyVideoWords = await repostitory.TodayVideoWordsGet();
                     if (toadyVideoWords.Count <= 0)
                     {
-                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0,0,0,0});
+                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0,0});
                         await Task.Delay(3000);
                         continue;
                     }
@@ -622,8 +623,8 @@ namespace VideoHandler
             Console.WriteLine($"第{page}页批次");
             var result = await client.QueryVideosAsync(new VideoQueryBuilder()
             {
-                //VideoType = PixabaySharp.Enums.VideoType.Film,
-                Category = PixabaySharp.Enums.Category.Nature,
+                VideoType = PixabaySharp.Enums.VideoType.Film,
+                //Category = PixabaySharp.Enums.Category.Nature,
                 //IsEditorsChoice = true,
                 Query = tag,
                 Page = page,
