@@ -1,7 +1,19 @@
 ﻿1.转格式和截取
 ffmpeg -i Eutopia.ogg Eutopia.mp3
+ffmpeg -i 1.m4a 1.wav
+ffmpeg -i 1.m4a -f s16le -acodec pcm_s16le 1.pcm
+ffmpeg -i 1_cut.wav -f s16le -acodec pcm_s16le 1_cut.pcm
+
+取前三秒
+ffmpeg -i 1.wav -t 3 1_cut.wav
 
 for /f %i in ('ffprobe -v error -show_entries format^=duration -of default^=noprint_wrappers^=1:nokey^=1 "Eutopia.mp3"') do ffmpeg -ss 00:02:07 -i "Eutopia.mp3" -to %i -c copy 123.mp3
 
 2.截取特定片段
 ffmpeg -ss 00:00:00 -i 20231116205304_223.mp4 -to 00:01:19 -c:v copy -c:a copy  output.mp4
+
+
+
+https://pc.ximalaya.com/simple-revision-for-pc/play/v1/show?id=575409199&sort=0&size=30&ptype=1
+整个专辑分页：https://pc.ximalaya.com/simple-revision-for-pc/album/v1/getTracksList?albumId=71532373&pageNum=1&pageSize=30&sort=0
+单个音频的文件地址:https://pc.ximalaya.com/simple-revision-for-pc/play/v1/audio?id=636724701&ptype=1 

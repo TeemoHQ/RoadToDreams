@@ -13,8 +13,8 @@ using System.Linq;
 using System.Speech.Recognition;
 using System.Speech.Synthesis;
 using VideoHandler.DbModel;
+using VideoHandler.Pexels;
 using VideoHandler.Repositories;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace VideoHandler
 {
@@ -34,7 +34,7 @@ namespace VideoHandler
                 Console.ReadKey();
                 return;
             }
-            if (appSettings.IsBackground)
+            if (appSettings.ExcuteType == 1)
             {
                 Console.WriteLine($"WebType:{appSettings.WebType} tag:{appSettings.SearchTag} 开始执行");
                 if (string.IsNullOrWhiteSpace(appSettings.SearchTag))
@@ -43,6 +43,12 @@ namespace VideoHandler
                     return;
                 }
                 await BackgroundHandler();
+                return;
+            }
+            if (appSettings.ExcuteType == 2)
+            {
+                await GetVoice();
+                return;
             }
 
             var outputDirPath = "Output";
@@ -51,34 +57,34 @@ namespace VideoHandler
                 Directory.CreateDirectory(outputDirPath);
             }
             Console.WriteLine("开始构造");
-            PexelsSpider.Init();
+            HttpClientHelper.Init();
             var repostitory = new VideoRepository(appSettings.MysqlConnectionString);
-            while (true)
+            while (appSettings.CreateVideoCount > 0)
             {
                 try
                 {
                     var lastModel = await repostitory.LastVideoResultGet();
                     var minId = lastModel?.OrginId;
                     var minWordsId = lastModel?.WordsId;
+                    var minVoiceId = lastModel?.VoiceId;
 
-                    var toadyVideoWords = await repostitory.TodayVideoWordsGet();
-                    if (toadyVideoWords.Count <= 0)
-                    {
-                        await repostitory.AddTodayVideoWords(appSettings.BgmIdList??new List<int> { 0,0,0,0});
-                        await Task.Delay(3000);
-                        continue;
-                    }
-
-                    var videoWords = await repostitory.LastVideoWordsGet(minWordsId ?? 0);
-                    if (videoWords == null)
+                    var videoWords = appSettings.VideoType == EnumVideoType.VideoWithWords ? await repostitory.LastVideoWordsGet(minWordsId ?? 0) : new VideoWords { Content = string.Empty, EmotionType = (int)EnumEmotion.忧郁 };
+                    if (appSettings.VideoType == EnumVideoType.VideoWithWords && string.IsNullOrWhiteSpace(videoWords?.Content))
                     {
                         Console.WriteLine("无可用文案");
-                        await Task.Delay(10 * 60 * 1000);
-                        continue;
+                        Console.ReadKey();
+                        return;
                     }
-                    if (string.IsNullOrWhiteSpace(videoWords.Content))
+                    var videoVoice = new VideoVoice { };
+                    if (appSettings.VideoType == EnumVideoType.videoWithVoice)
                     {
-                        videoWords.EmotionType = (int)EnumEmotion.忧郁;
+                        videoVoice = await repostitory.LastVideoVideoGet(minVoiceId ?? 0);
+                        if (string.IsNullOrWhiteSpace(videoVoice?.Path))
+                        {
+                            Console.WriteLine("无可用Voice");
+                            Console.ReadKey();
+                            return;
+                        }
                     }
                     var tag = appSettings.SearchTag;
                     var videoOrgin = await repostitory.LastVideoOrginGet(tag, minId ?? 0);
@@ -95,16 +101,21 @@ namespace VideoHandler
                         }
                         continue;
                     }
-                    var bgm = videoWords.BgmId > 0? await repostitory.VideoBgmGet(videoWords.BgmId):
-                        await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
+                    var bgm = videoWords.BgmId > 0 ? await repostitory.VideoBgmGet(videoWords.BgmId) : await repostitory.RandVideoBgmGet(videoWords.EmotionType, lastModel?.BgmId ?? 0);
                     if (!string.IsNullOrWhiteSpace(bgm?.Path) && !string.IsNullOrWhiteSpace(videoOrgin?.Path) && videoWords != null)
                     {
                         Console.WriteLine("开始检查视频音频");
                         var isHadVoice = CheckVideoAudioStream(videoOrgin.Path);
                         var outputVideoPath = $"{outputDirPath}/{DateTime.Now:yyyyMMddHHmmss}_{videoOrgin.Id}.mp4";
                         Console.WriteLine($"开始添加文本,如果没有文本那么只添加bgm");
-                        if (!string.IsNullOrWhiteSpace(videoWords.Content))
+                        if (appSettings.VideoType == EnumVideoType.VideoWithWords)
                         {
+                            if (string.IsNullOrWhiteSpace(videoWords.Content))
+                            {
+                                Console.WriteLine($"没有words");
+                                Console.ReadKey();
+                                return;
+                            }
                             if (appSettings.WordSameTime)
                             {
                                 AddTextToVideoSameTime(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
@@ -114,9 +125,13 @@ namespace VideoHandler
                                 AddTextToVideo(bgm.Path, videoOrgin.Path, outputVideoPath, videoWords.Content, isHadVoice);
                             }
                         }
-                        else
+                        else if (appSettings.VideoType == EnumVideoType.OnlyVideo)
                         {
                             AddTextToVideoWithoutWords(bgm.Path, videoOrgin.Path, outputVideoPath, videoOrgin.Duration, isHadVoice);
+                        }
+                        else if (appSettings.VideoType == EnumVideoType.videoWithVoice)
+                        {
+                            //拼接bgm和voice
                         }
 
                         await repostitory.VideoResultSave(new DbModel.VideoResult { OrginId = videoOrgin.Id, WordsId = videoWords.Id, BgmId = bgm.Id, Path = outputVideoPath });
@@ -127,6 +142,10 @@ namespace VideoHandler
                     Console.WriteLine(ex);
                     await Task.Delay(10 * 60 * 1000);
                     continue;
+                }
+                finally
+                {
+                    appSettings.CreateVideoCount--;
                 }
 
             }
@@ -141,7 +160,7 @@ namespace VideoHandler
             {
                 foreach (var item in videopoolList)
                 {
-                    if (await PexelsSpider.DownLoad(item, appSettings.ResourcesPath))
+                    if (await HttpClientHelper.DownLoad(item, appSettings.ResourcesPath))
                     {
                         var id = await repostitory.AfterDownload(item);
                         orginVideoIds.Add(id);
@@ -625,7 +644,7 @@ namespace VideoHandler
                 Page = page,
                 PerPage = 200
             });
-             if (result == null || result.Videos == null || result.Videos.Count <= 0)
+            if (result == null || result.Videos == null || result.Videos.Count <= 0)
             {
                 Console.WriteLine("已经查询到最后一页了");
                 return false;
@@ -636,9 +655,9 @@ namespace VideoHandler
                 if (VideoItem.Videos.Large != null && !string.IsNullOrWhiteSpace(VideoItem.Videos.Large.Url))
                 {
                     fileInfo = VideoItem.Videos.Large;
-                  
+
                 }
-                else if(VideoItem.Videos.Medium != null && !string.IsNullOrWhiteSpace(VideoItem.Videos.Medium.Url))
+                else if (VideoItem.Videos.Medium != null && !string.IsNullOrWhiteSpace(VideoItem.Videos.Medium.Url))
                 {
                     fileInfo = VideoItem.Videos.Medium;
                 }
@@ -668,5 +687,66 @@ namespace VideoHandler
 
         #endregion
 
+        #region 百度语音识别
+
+        [Obsolete("识别能力太差了")]
+        public static void STT()
+        {
+            // 设置APPID/AK/SK
+            var APP_ID = "44344692";
+            var API_KEY = "wd4y16jTG1q8pL5ZAKRk1fl9";
+            var SECRET_KEY = "EfrDc9sNmGmqTEU5pqHxggA4XsKf92ly";
+
+            var client = new Baidu.Aip.Speech.Asr(APP_ID, API_KEY, SECRET_KEY);
+            client.Timeout = 600000;  // 修改超时时间
+
+            var data = File.ReadAllBytes("C:\\Users\\dell\\Downloads\\1_cut.wav");
+
+            // 可选参数
+            var options = new Dictionary<string, object>
+             {
+                {"dev_pid", 1537}
+             };
+            client.Timeout = 1200000; // 若语音较长，建议设置更大的超时时间. ms
+            var result = client.Recognize(data, "pcm", 16000, options);
+            Console.Write(result);
+        }
+
+        #endregion
+
+        #region 读取喜马拉雅文件
+        //1.fiddle 获取.m4a文件
+        //fiddle脚本：
+        //  if(oSession.uriContains(".m4a")){
+        //    oSession.SaveRequest('E:\\Personal\\Resources\\ximalaya_catch\\'+ oSession.SuggestedFilename,true);
+        //}
+        //2.根据文件地址下载音频文件，保存到磁盘和数据库
+        //3.抓取专辑标题和id。 （AI这个文档破解不了）
+        public static async Task GetVoice()
+        {
+            var files = Directory.GetFiles(appSettings.XimalayaVoicePath + "requestfile");
+            var voicePathDic = new Dictionary<string, string>();
+            foreach (var item in files)
+            {
+                var headStr = File.ReadAllLines(item).First();
+                var key = headStr.Replace("GET ", "https://aod.cos.tx.xmcdn.com/").Replace(" HTTP/1.1", "");
+                if (!voicePathDic.ContainsKey(key))
+                {
+                    voicePathDic.Add(key, appSettings.XimalayaVoicePath + $"voice/{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(item)}.m4a");
+                }
+            }
+            var r = new VideoRepository(appSettings.MysqlConnectionString);
+            foreach (var item in voicePathDic)
+            {
+                if (await HttpClientHelper.DownLoad(item.Key, item.Value))
+                {
+                    Console.WriteLine($"下载成功：{item.Value}");
+                    //存到数据库
+                    await r.VideoVoiceSave(new VideoVoice { Path = item.Value });
+                }
+
+            }
+        }
+        #endregion
     }
 }

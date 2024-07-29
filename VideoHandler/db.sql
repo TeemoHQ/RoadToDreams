@@ -66,3 +66,13 @@ SELECT * FROM video_orgin;
 SELECT * FROM video_words;
 SELECT * FROM video_bgm order by name;
 select * from video_pool  where tag='autumn' and web_type=1 and video_id=5479715;
+
+CREATE TABLE `video_voice` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `create_time` datetime NOT NULL,
+  `path` varchar(105) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=99 DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE `video_result` 
+ADD COLUMN `voice_id` INT(11) NOT NULL AFTER `bgm_id`;

@@ -21,6 +21,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\BaiduAipSdk\AipSdk.csproj" />
 	  <ProjectReference Include="..\PixabaySharp\PixabaySharp.csproj" />
 	</ItemGroup>
 

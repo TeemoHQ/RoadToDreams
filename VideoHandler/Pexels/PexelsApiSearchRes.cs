@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace VideoHandler
+namespace VideoHandler.Pexels
 {
     public class PexelsApiSearchRes
     {
@@ -14,7 +14,7 @@ namespace VideoHandler
         public List<Video> videos { get; set; }
     }
 
-    public class Video 
+    public class Video
     {
         public int id { get; set; }
 

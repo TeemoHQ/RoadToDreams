@@ -6,17 +6,11 @@ using System.Threading.Tasks;
 
 namespace VideoHandler.DbModel
 {
-    public class VideoResult
+    public class VideoVoice
     {
         public int Id { get; set; }
 
-        public int OrginId { get; set; }
-
-        public int WordsId { get; set; }
-
-        public int BgmId { get; set; }
-
-        public int VoiceId { get; set; }
+        public DateTime CreateTime { get; set; }
 
         public string Path { get; set; }
     }

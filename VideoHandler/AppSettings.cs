@@ -9,6 +9,10 @@ namespace VideoHandler
 {
     public class AppSettings
     {
+        public EnumVideoType VideoType { get; set; }
+
+        public int CreateVideoCount { get; set; }
+
         public string MysqlConnectionString { get; set; }
 
         public string ResourcesPath { get; set; }
@@ -35,9 +39,11 @@ namespace VideoHandler
 
         public string SearchTag { get; set; }
 
-        public bool IsBackground { get; set; }
+        public int ExcuteType { get; set; }
 
         public int ConcatCount { get; set; } = 4;
+
+        public string XimalayaVoicePath { get; set; }
     }
 
 }

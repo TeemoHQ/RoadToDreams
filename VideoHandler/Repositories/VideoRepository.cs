@@ -28,6 +28,11 @@ namespace VideoHandler.Repositories
             return await _connection.QueryFirstOrDefaultAsync<VideoWords>($"select id,content,emotion_type EmotionType,bgm_id BgmId   from video_words WHERE id >{minWordsId}  limit 1");
         }
 
+        public async Task<VideoVoice> LastVideoVideoGet(int minVoiceId)
+        {
+            return await _connection.QueryFirstOrDefaultAsync<VideoVoice>($"select id,create_time,path   from video_voice WHERE id >{minVoiceId}  limit 1");
+        }
+
         public async Task<List<VideoWords>> TodayVideoWordsGet()
         {
             var res= await _connection.QueryAsync<VideoWords>($"select id,content,emotion_type EmotionType,bgm_id BgmId  from video_words WHERE add_time>curdate()");
@@ -139,5 +144,11 @@ namespace VideoHandler.Repositories
             var res = await _connection.QueryAsync<string>(sql, new { ids });
             return res.ToList();
         }
+
+        public async Task<bool> VideoVoiceSave(VideoVoice videoVoice)
+        {
+            return await _connection.ExecuteAsync($"insert into video_voice(create_time,path) values(now(3),'{videoVoice.Path}')") > 0;
+        }
+
     }
 }

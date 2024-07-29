@@ -14,7 +14,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using VideoHandler.DbModel;
 
-namespace VideoHandler
+namespace VideoHandler.Pexels
 {
     //API key:HsuZCJYlo5KiN6Bk0Nr0Dt3ikLD6xySX7EGKuRlTDkl7vOjxdxWr0P5B
     public class PexelsSpider
@@ -129,7 +129,7 @@ namespace VideoHandler
                                 VideoId = video.id,
                                 VideoFileId = fileInfo.id,
                                 Page = page,
-                                WebType=(int)EnumWebType.pexels
+                                WebType = (int)EnumWebType.pexels
                             });
                         }
                     }
