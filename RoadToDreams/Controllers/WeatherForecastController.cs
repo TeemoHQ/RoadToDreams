@@ -8,7 +8,7 @@ namespace RoadToDreams.Controllers
     {
         private static readonly string[] Summaries = new[]
         {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
+            "aaaaaaa", "bbbbbbbb", "vvvvvvvvv", "ddddddddddd", "Mild", "eeeeeeeeee", "fffffffff", "ggggggggg", "hhhhhhhhh", "iiiiiiiiiiii"
         };
 
         private readonly ILogger<WeatherForecastController> _logger;
